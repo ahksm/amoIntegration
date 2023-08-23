@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\AmoCRMController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -13,6 +14,6 @@ use Illuminate\Support\Facades\Route;
 |
 */
 
-Route::get('/', function () {
-    return view('welcome');
-})->name('home');
+Route::get('/', [AmoCRMController::class, 'index'])->name('home');
+Route::get('/contacts', [AmoCRMController::class, 'contacts'])->name('success');
+Route::post('/get-contacts', [AmoCRMController::class, 'getContact']);

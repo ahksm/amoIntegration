@@ -293,9 +293,9 @@
 
                 <span class="gender-title">Пол</span>
                 <div class="gender">
-                    <input type="radio" name="gender" value="Male"><label>Мужской</label>
-                    <input type="radio" name="gender" value="Female"><label>Женский</label>
-                    <input type="radio" name="gender" value="Others"><label>Другой</label>
+                    <input type="radio" name="gender" value="Мужской"><label>Мужской</label>
+                    <input type="radio" name="gender" value="Женский"><label>Женский</label>
+                    <input type="radio" name="gender" value="Другой"><label>Другой</label>
                 </div>
             </div>
 

@@ -62,7 +62,7 @@ class AmoCRMService
         }
     }
 
-    private function connect_to_client($request)
+    private function connect($request)
     {
         session_start();
 
@@ -156,10 +156,10 @@ class AmoCRMService
         }
     }
 
-    public function createContact($contactData)
+    public function createContact($request)
     {
-        $client = $this->connect_to_client($contactData);
-        $duplicate = $this->isDuplicate($contactData, $client);
+        $client = $this->connect($request);
+        $duplicate = $this->isDuplicate($request, $client);
 
         if ($duplicate) {
             $linksService = $client->links(EntityTypesInterface::CONTACTS);
@@ -176,23 +176,22 @@ class AmoCRMService
                 $links = new LinksCollection();
                 $links->add($duplicate);
                 $client->customers()->link($customerModel, $links);
-                return 0;
-            } else {
+
                 $notesCollection = new NotesCollection();
                 $commonNote = new CommonNote();
-                $commonNote->setEntityId($linkedLead->getId())
-                    ->setText('Для создания покупателя нужно перевести сделку в статус "Успешно реализовано"');
+                $commonNote->setEntityId($customerModel->getId())
+                    ->setText('Данный клиент уже является покупателем!');
                 $notesCollection->add($commonNote);
-
-                $leadNotesService = $client->notes(EntityTypesInterface::LEADS);
+                $leadNotesService = $client->notes(EntityTypesInterface::CUSTOMERS);
                 $leadNotesService->add($notesCollection);
-                return 1;
-            }
+
+                return 0;
+            } else return 1;
         } else {
             $contact = new ContactModel();
             $account = $client->account()->getCurrent();
-            $contact->setFirstName($contactData['first_name'])
-                ->setLastName($contactData['last_name'])
+            $contact->setFirstName($request['first_name'])
+                ->setLastName($request['last_name'])
                 ->setAccountId($account->getId());
 
             $this->addField($client);
@@ -204,7 +203,7 @@ class AmoCRMService
             }
             $phoneField->setValues(
                 (new TextCustomFieldValueCollection())
-                    ->add((new TextCustomFieldValueModel())->setValue($contactData['phone']))
+                    ->add((new TextCustomFieldValueModel())->setValue($request['phone']))
             );
             $customFields->add($phoneField);
 
@@ -214,7 +213,7 @@ class AmoCRMService
             }
             $emailField->setValues(
                 (new TextCustomFieldValueCollection())
-                    ->add((new TextCustomFieldValueModel())->setValue($contactData['email']))
+                    ->add((new TextCustomFieldValueModel())->setValue($request['email']))
             );
             $customFields->add($emailField);
 
@@ -224,7 +223,7 @@ class AmoCRMService
             }
             $genderField->setValues(
                 (new TextCustomFieldValueCollection())
-                    ->add((new TextCustomFieldValueModel())->setValue($contactData['gender']))
+                    ->add((new TextCustomFieldValueModel())->setValue($request['gender']))
             );
             $customFields->add($genderField);
 
@@ -234,7 +233,7 @@ class AmoCRMService
             }
             $ageField->setValues(
                 (new NumericCustomFieldValueCollection())
-                    ->add((new NumericCustomFieldValueModel())->setValue($contactData['age']))
+                    ->add((new NumericCustomFieldValueModel())->setValue($request['age']))
             );
             $customFields->add($ageField);
 
@@ -246,36 +245,34 @@ class AmoCRMService
         }
     }
 
-    private function isDuplicate($contactData, $client)
+    private function isDuplicate($request, $client)
     {
-        foreach ($client->contacts()->get() as $contact) {
+        $contacts = $client->contacts()->get();
+        foreach ($contacts as $contact) {
             $customFieldsValues = $contact->getCustomFieldsValues();
-
             if ($customFieldsValues) {
                 $phoneField = $customFieldsValues->getBy('fieldCode', 'PHONE');
-
-                if ($phoneField) {
-                    $contactPhone = preg_replace('/\D/', '', $contactData['phone']);
-                    $fieldPhone = preg_replace('/\D/', '', $phoneField->getValues()->first()->getValue());
-
-                    if ($fieldPhone === $contactPhone) {
-                        return $contact;
-                    }
+                if ($phoneField && $phoneField->getValues()->first()->getValue() == $request['phone']) {
+                    $duplicate = $contact;
+                    break;
                 }
             }
         }
-
-        return null;
+        if (empty($duplicate)) {
+            return null;
+        } else {
+            return $duplicate;
+        }
     }
 
-    private function addField($apiClient)
+    private function addField($client)
     {
         $fields = [
             ['GENDER', 'Пол', 30, TextCustomFieldModel::class],
             ['AGE', 'Возраст', 40, NumericCustomFieldModel::class],
         ];
 
-        $service = $apiClient->customFields(EntityTypesInterface::CONTACTS);
+        $service = $client->customFields(EntityTypesInterface::CONTACTS);
         $collection = new CustomFieldsCollection();
 
         foreach ($fields as $data) {
@@ -291,9 +288,9 @@ class AmoCRMService
         if ($collection->count()) $service->add($collection);
     }
 
-    private function linkLead($contact, $apiClient)
+    private function linkLead($contact, $client)
     {
-        $usersCollection = $apiClient->users()->get();
+        $usersCollection = $client->users()->get();
         $randUser = $usersCollection[array_rand($usersCollection->toArray())];
 
         $lead = (new LeadModel())
@@ -303,44 +300,50 @@ class AmoCRMService
             ->setCreatedAt((new DateTime())->getTimestamp())
             ->setResponsibleUserId($randUser->getId());
 
-        $leadModel = $apiClient->leads()->addOne($lead);
+        $leadModel = $client->leads()->addOne($lead);
 
         $links = (new LinksCollection())->add($leadModel);
-        $apiClient->contacts()->link($contact, $links);
+        $client->contacts()->link($contact, $links);
 
-        $this->linkTask($leadModel, $apiClient);
-        $this->linkProduct($leadModel, $apiClient);
+        $this->linkTask($leadModel, $client);
+        $this->linkProduct($leadModel, $client);
     }
 
-    private function linkTask($lead, $apiClient)
+    private function linkTask($lead, $client)
     {
-        $now = new DateTime();
-        $completeTill = (clone $now)->setTime(9, 0, 0);
+        $task = new TaskModel();
+        $completeTill = strtotime("+4 days 4 hours", strtotime(date("Y-m-d", $lead->getCreatedAt())));
+        if (in_array(date("w", $completeTill), [0, 6])) $completeTill += (8 - date("w", $completeTill)) * 4 * 60 * 60;
 
-        while ($completeTill->format('N') >= 6) $completeTill->add(new DateInterval('P1D'));
-        $completeTill->add(new DateInterval('P4D'));
+        $task->setTaskTypeId(TaskModel::TASK_TYPE_ID_CALL)
+            ->setText('Новая задача')
+            ->setCompleteTill($completeTill)
+            ->setDuration(9 * 60 * 60)
+            ->setEntityType(EntityTypesInterface::LEADS)
+            ->setEntityId($lead->getId())
+            ->setResponsibleUserId($lead->getResponsibleUserId());
 
-        if ($completeTill->format('N') >= 6) $completeTill->modify('next monday');
-        $completeTill->setTime(18, 0, 0);
-
-        $apiClient->tasks()->addOne((new TaskModel())->setTaskTypeId(TaskModel::TASK_TYPE_ID_CALL)->setText('Task for you!')->setCompleteTill($completeTill->getTimestamp())->setEntityType(EntityTypesInterface::LEADS)->setEntityId($lead->getId())->setResponsibleUserId($lead->getResponsibleUserId()));
+        $taskModel = $client->tasks()->addOne($task);
     }
 
-
-    private function linkProduct($lead, $apiClient)
+    private function linkProduct($lead, $client)
     {
-        $catalogsCollection = $apiClient->catalogs()->get();
-        $catalog = $catalogsCollection->getBy('name', 'Товары');
-        $catalogElementsService = $apiClient->catalogElements($catalog->getId());
-        $catalogElementsCollection = $catalogElementsService->get();
+        $catalogName = 'Товары';
+        $quantityFirstProduct = 999;
+        $quantitySecondProduct = 350;
 
-        $firstProduct = $catalogElementsCollection->first();
-        $firstProduct->setQuantity(999);
-        $secondProduct = $catalogElementsCollection->last();
-        $secondProduct->setQuantity(350);
+        $catalogs = $client->catalogs()->get();
+        $catalog = $catalogs->getBy('name', $catalogName);
+        $catalogElements = $client->catalogElements($catalog->getId())->get();
+
+        $firstProduct = $catalogElements[0];
+        $secondProduct = $catalogElements[1];
+
+        $firstProduct->setQuantity($quantityFirstProduct);
+        $secondProduct->setQuantity($quantitySecondProduct);
 
         $links = new LinksCollection();
         $links->add($firstProduct)->add($secondProduct);
-        $apiClient->leads()->link($lead, $links);
+        $client->leads()->link($lead, $links);
     }
 }

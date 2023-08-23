@@ -156,7 +156,7 @@ class AmoCRMService
         }
     }
 
-    public function createContact($request)
+    public function handleContact($request)
     {
         $client = $this->connect($request);
         $duplicate = $this->isDuplicate($request, $client);
@@ -194,43 +194,31 @@ class AmoCRMService
                 ->setLastName($request['last_name'])
                 ->setAccountId($account->getId());
 
-            $this->addField($client);
+            $this->addFields($client);
             $customFields = new CustomFieldsValuesCollection();
 
-            $phoneField = $customFields->getBy('code', 'PHONE');
-            if (empty($phoneField)) {
-                $phoneField = (new TextCustomFieldValuesModel())->setFieldCode('PHONE');
-            }
+            $phoneField = (new TextCustomFieldValuesModel())->setFieldCode('PHONE');
             $phoneField->setValues(
                 (new TextCustomFieldValueCollection())
                     ->add((new TextCustomFieldValueModel())->setValue($request['phone']))
             );
             $customFields->add($phoneField);
 
-            $emailField = $customFields->getBy('code', 'EMAIL');
-            if (empty($emailField)) {
-                $emailField = (new TextCustomFieldValuesModel())->setFieldCode('EMAIL');
-            }
+            $emailField = (new TextCustomFieldValuesModel())->setFieldCode('EMAIL');
             $emailField->setValues(
                 (new TextCustomFieldValueCollection())
                     ->add((new TextCustomFieldValueModel())->setValue($request['email']))
             );
             $customFields->add($emailField);
 
-            $genderField = $customFields->getBy('code', 'GENDER');
-            if (empty($genderField)) {
-                $genderField = (new TextCustomFieldValuesModel())->setFieldCode('GENDER');
-            }
+            $genderField = (new TextCustomFieldValuesModel())->setFieldCode('GENDER');
             $genderField->setValues(
                 (new TextCustomFieldValueCollection())
                     ->add((new TextCustomFieldValueModel())->setValue($request['gender']))
             );
             $customFields->add($genderField);
 
-            $ageField = $customFields->getBy('code', 'AGE');
-            if (empty($ageField)) {
-                $ageField = (new NumericCustomFieldValuesModel())->setFieldCode('AGE');
-            }
+            $ageField = (new NumericCustomFieldValuesModel())->setFieldCode('AGE');
             $ageField->setValues(
                 (new NumericCustomFieldValueCollection())
                     ->add((new NumericCustomFieldValueModel())->setValue($request['age']))
@@ -265,7 +253,7 @@ class AmoCRMService
         }
     }
 
-    private function addField($client)
+    private function addFields($client)
     {
         $fields = [
             ['GENDER', 'Пол', 30, TextCustomFieldModel::class],
@@ -306,14 +294,14 @@ class AmoCRMService
         $client->contacts()->link($contact, $links);
 
         $this->linkTask($leadModel, $client);
-        $this->linkProduct($leadModel, $client);
+        $this->linkProducts($leadModel, $client);
     }
 
     private function linkTask($lead, $client)
     {
         $task = new TaskModel();
-        $completeTill = strtotime("+4 days -4 hours", strtotime(date("Y-m-d", $lead->getCreatedAt())));
-        if (in_array(date("w", $completeTill), [0, 6])) $completeTill += (8 - date("w", $completeTill)) * 4 * 60 * 60;
+        $completeTill = strtotime('+4 days -4 hours', strtotime(date('Y-m-d', $lead->getCreatedAt())));
+        if (in_array(date('w', $completeTill), [0, 6])) $completeTill += (8 - date('w', $completeTill)) * 4 * 60 * 60;
 
         $task->setTaskTypeId(TaskModel::TASK_TYPE_ID_CALL)
             ->setText('Новая задача')
@@ -326,14 +314,14 @@ class AmoCRMService
         $taskModel = $client->tasks()->addOne($task);
     }
 
-    private function linkProduct($lead, $client)
+    private function linkProducts($lead, $client)
     {
-        $catalogName = 'Товары';
+        $catalogType = 'products';
         $quantityFirstProduct = 999;
         $quantitySecondProduct = 350;
 
         $catalogs = $client->catalogs()->get();
-        $catalog = $catalogs->getBy('name', $catalogName);
+        $catalog = $catalogs->getBy('catalogType', $catalogType);
         $catalogElements = $client->catalogElements($catalog->getId())->get();
 
         $firstProduct = $catalogElements[0];

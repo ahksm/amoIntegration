@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
@@ -7,7 +9,6 @@ use App\Services\AmoCRMService;
 
 class AmoCRMController extends Controller
 {
-
     protected $amocrm;
 
     public function __construct(AmoCRMService $amocrm)
@@ -38,7 +39,7 @@ class AmoCRMController extends Controller
         ];
 
         $request->validate($rules);
-        $status = $this->amocrm->createContact($request);
+        $status = $this->amocrm->handleContact($request);
 
         switch ($status) {
             case 0:

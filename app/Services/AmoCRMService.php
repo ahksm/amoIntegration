@@ -312,7 +312,7 @@ class AmoCRMService
     private function linkTask($lead, $client)
     {
         $task = new TaskModel();
-        $completeTill = strtotime("+4 days 4 hours", strtotime(date("Y-m-d", $lead->getCreatedAt())));
+        $completeTill = strtotime("+4 days -4 hours", strtotime(date("Y-m-d", $lead->getCreatedAt())));
         if (in_array(date("w", $completeTill), [0, 6])) $completeTill += (8 - date("w", $completeTill)) * 4 * 60 * 60;
 
         $task->setTaskTypeId(TaskModel::TASK_TYPE_ID_CALL)
